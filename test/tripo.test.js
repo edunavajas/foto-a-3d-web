@@ -58,7 +58,7 @@ test('createImageToModelTask posts the file token as input', async t => {
   const taskId = await client().createImageToModelTask('tok-1');
   assert.equal(taskId, 'task-9');
   assert.equal(calls[0].url, `${BASE}/v3/generation/image-to-model`);
-  assert.deepEqual(JSON.parse(calls[0].init.body), { input: 'tok-1' });
+  assert.deepEqual(JSON.parse(calls[0].init.body), { input: 'tok-1', model: 'v3.1-20260211' });
 });
 
 test('getTask hits the task endpoint and returns the task object', async t => {

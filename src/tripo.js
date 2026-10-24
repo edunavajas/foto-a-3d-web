@@ -122,7 +122,7 @@ export class TripoClient {
     const data = await this.#send(
       'POST',
       '/v3/generation/image-to-model',
-      { body: JSON.stringify({ input: fileToken }), headers: { 'Content-Type': 'application/json' } },
+      { body: JSON.stringify({ input: fileToken, model: process.env.TRIPO_MODEL || 'v3.1-20260211' }), headers: { 'Content-Type': 'application/json' } },
       { idempotent: false },
     );
     return data.task_id;
