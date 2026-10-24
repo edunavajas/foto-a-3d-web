@@ -53,12 +53,16 @@ test('uploadImage posts multipart with the right field, mime and filename', asyn
   assert.deepEqual(Buffer.from(await part.arrayBuffer()), bytes);
 });
 
-test('createImageToModelTask posts the file token as input', async t => {
+test('createImageToModelTask posts the file token and the given wire model value', async t => {
   const calls = stubFetch(t, () => jsonResponse({ code: 0, data: { task_id: 'task-9' } }));
-  const taskId = await client().createImageToModelTask('tok-1');
+  const taskId = await client().createImageToModelTask('tok-1', 'P1-20260311');
   assert.equal(taskId, 'task-9');
   assert.equal(calls[0].url, `${BASE}/v3/generation/image-to-model`);
-  assert.deepEqual(JSON.parse(calls[0].init.body), { input: 'tok-1', model: 'v3.1-20260211' });
+  assert.deepEqual(JSON.parse(calls[0].init.body), { input: 'tok-1', model: 'P1-20260311' });
+});
+
+test('createImageToModelTask requires a model (no silent default)', async () => {
+  await assert.rejects(client().createImageToModelTask('tok-1'), TripoError);
 });
 
 test('getTask hits the task endpoint and returns the task object', async t => {
@@ -89,7 +93,7 @@ test('downloadModel fetches the selected .glb URL and returns its bytes', async 
 
 test('task creation is NOT retried on 5xx (the task may already exist)', async t => {
   const calls = stubFetch(t, () => jsonResponse({ code: 1, data: null, message: 'boom' }, 500));
-  await assert.rejects(client().createImageToModelTask('tok-1'), { message: 'boom' });
+  await assert.rejects(client().createImageToModelTask('tok-1', 'P1-20260311'), { message: 'boom' });
   assert.equal(calls.length, 1);
 });
 
@@ -98,7 +102,7 @@ test('task creation IS retried on 429 (proves nothing was created)', async t => 
     attempt === 1
       ? jsonResponse({ code: 1, data: null, message: 'rate limited' }, 429, { 'retry-after': '0' })
       : jsonResponse({ code: 0, data: { task_id: 'task-9' } }));
-  assert.equal(await client().createImageToModelTask('tok-1'), 'task-9');
+  assert.equal(await client().createImageToModelTask('tok-1', 'P1-20260311'), 'task-9');
   assert.equal(calls.length, 2);
 });
 

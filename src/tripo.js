@@ -6,6 +6,10 @@
  */
 const FAILED_STATUSES = new Set(['failed', 'cancelled', 'expired']);
 
+/** Wire values for the image-to-model models (verified against the Tripo V3 API). */
+export const MODEL_FAST = 'P1-20260311'; // low-poly, fast, cheaper
+export const MODEL_BEST = 'v3.1-20260211'; // high fidelity, slower
+
 export class TripoError extends Error {
   constructor(message, { httpStatus, apiCode, retryAfterMs } = {}) {
     super(message);
@@ -118,11 +122,12 @@ export class TripoClient {
     return data.file_token;
   }
 
-  async createImageToModelTask(fileToken) {
+  async createImageToModelTask(fileToken, model) {
+    if (!model) throw new TripoError('createImageToModelTask requires a model');
     const data = await this.#send(
       'POST',
       '/v3/generation/image-to-model',
-      { body: JSON.stringify({ input: fileToken, model: process.env.TRIPO_MODEL || 'v3.1-20260211' }), headers: { 'Content-Type': 'application/json' } },
+      { body: JSON.stringify({ input: fileToken, model }), headers: { 'Content-Type': 'application/json' } },
       { idempotent: false },
     );
     return data.task_id;
