@@ -1,54 +1,31 @@
-# Foto a 3D (web)
+# Foto a 3D
 
-Servicio web móvil protegido con contraseña: haces una foto con el teléfono, la API de Tripo genera un modelo 3D en formato GLB en la nube, y lo visualizas y giras directamente en el navegador del móvil.
+Servicio web móvil: sube una foto y Tripo genera un modelo 3D (GLB) que puedes girar y descargar desde el teléfono.
 
-Es la versión en la nube del proyecto local [foto-a-3d](../foto-a-3d): en lugar de procesar en local, el servidor llama a la [API REST de Tripo V3](https://platform.tripo3d.ai) directamente.
+## Interfaz
 
-## Cómo funciona
+- **Login por contraseña**: solo contraseña, sin usuario. Cookie de sesión `HttpOnly` válida 30 días (sobrevive a reinicios del servidor).
+- **Dos modos de generación**:
+  - **Rápido**: modelo low-poly (`P1-20260311`). Gasta menos créditos y está listo en segundos.
+  - **Máxima calidad**: primero se publica el modelo rápido y después se lanza una segunda tarea de alta fidelidad (`v3.1-20260211`) reutilizando la foto ya subida. Mientras mejora ves el modelo rápido con el aviso «Mejorando a máxima calidad…»; al terminar el visor cambia al modelo HQ. Coste aproximado: Rápido gasta menos; Máxima consume una tarea P1 + una tarea v3.1. Si la fase de mejora falla, conservas el modelo rápido (la mejora es un extra, no un error).
+- Animación de nube de puntos durante la generación (los colores de la foto se convierten en puntos con profundidad) y visor 3D interactivo con botón «Descargar GLB».
 
-1. Abres la web en el móvil (usuario `edu`, contraseña en `WEB_PASSWORD`) y haces una foto (JPEG, PNG, WebP o BMP, máx. 20 MB).
-2. El servidor sube la imagen a Tripo (`POST /v3/files`), crea la tarea (`POST /v3/generation/image-to-model`) y guarda el estado en `data/jobs.json`.
-3. La web consulta el estado cada 2 segundos; cuando la tarea termina, el servidor descarga el GLB inmediatamente (las URLs de salida de Tripo caducan en ~5 minutos) y lo sirve desde `data/models/`.
-4. El modelo se muestra con `<model-viewer>`: gíralo con el dedo y descárgalo como GLB.
+## Desarrollo
 
-Si el servidor se reinicia, los trabajos en curso se recuperan de `data/jobs.json` y siguen consultándose (el estado real vive en Tripo, asociado al `taskId`).
-
-## Requisitos
-
-- Node.js 20 o superior (en producción: Docker)
-- Una API key de Tripo
-
-## Variables de entorno
-
-| Variable      | Obligatoria | Por defecto | Descripción                                                  |
-| ------------- | ----------- | ----------- | ------------------------------------------------------------ |
-| `TRIPO_API_KEY` | Sí         | —           | API key de Tripo                                             |
-| `WEB_PASSWORD`  | Sí         | —           | Contraseña del acceso HTTP Basic (usuario `edu`). Si falta, el servidor no arranca |
-| `PORT`          | No         | `3000`      | Puerto HTTP                                                  |
-| `DATA_DIR`      | No         | `./data`    | Directorio de estado (`jobs.json` y modelos GLB)             |
-
-Copia `.env.example` a `.env`, rellénalo y expórtalo antes de arrancar:
-
-```sh
-set -a; source .env; set +a
-```
-
-## Arranque en local
-
-```sh
+```bash
 npm install
-npm start        # http://localhost:3000
-npm test         # suite offline (sin red)
+npm run build      # construye la SPA en dist/ (Vite, root web/)
+npm test           # 31 tests offline (node --test)
+npm start          # sirve dist/ y la API en el puerto 3000
 ```
 
-## Despliegue en Coolify
+Variables de entorno (ver `.env.example`): `TRIPO_API_KEY`, `WEB_PASSWORD`, `PORT`, `DATA_DIR`.
+El servidor no arranca sin `WEB_PASSWORD` y `TRIPO_API_KEY` (fail-closed).
 
-1. **New Resource → Application** apuntando al repositorio (deploy basado en el `Dockerfile` del repo).
-2. **Puerto**: `3000` (ya expuesto en el Dockerfile).
-3. **Variables de entorno**: `TRIPO_API_KEY` y `WEB_PASSWORD` (obligatorias). Opcionalmente `PORT` y `DATA_DIR`.
-4. **Volumen persistente**: monta un volumen en `/app/data` para que `jobs.json` y los modelos GLB sobrevivan a los reinicios.
-5. **Healthcheck**: el Dockerfile ya incluye uno contra `GET /api/health` (no requiere autenticación); úsalo también como healthcheck de Coolify.
+## Despliegue (Coolify)
 
-## Aviso de coste
+Sin cambios respecto al despliegue anterior:
 
-Cada generación consume **~30 créditos de Tripo**. No hay límite en el servidor más que "una generación a la vez", así que protege bien `WEB_PASSWORD`: cualquiera con acceso puede gastar tus créditos.
+- Dockerfile multi-etapa: etapa 1 construye la SPA, etapa 2 copia `src/` y `dist/` con dependencias de producción (solo `express` y `multer`).
+- Healthcheck contra `http://127.0.0.1:3000/api/health`; el proceso escucha en dual-stack (sin argumento de host).
+- Volumen en `/app/data` (`jobs.json` + `models/`). Los trabajos persisten y se reanudan tras un reinicio consultando el estado de la tarea en Tripo.

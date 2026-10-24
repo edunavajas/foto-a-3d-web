@@ -1,5 +1,16 @@
-FROM node:22-alpine
+# Stage 1: build the React SPA (dev deps + Vite only live here).
+FROM node:22-alpine AS build
+WORKDIR /app
 
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY web ./web
+COPY vite.config.js ./
+RUN npm run build
+
+# Stage 2: lean runtime — express + multer only, no dev deps.
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production DATA_DIR=/app/data
 
@@ -7,7 +18,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY src ./src
-COPY public ./public
+COPY --from=build /app/dist ./dist
 
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
