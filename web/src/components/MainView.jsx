@@ -72,6 +72,8 @@ export default function MainView({ onLogout, onExpired, notify }) {
       form.append('photo', photo);
       form.append('quality', quality);
       const created = await readJson(await fetch('/api/jobs', { method: 'POST', body: form }));
+      // Hand loading state over to the job status; submitting must not outlive the upload.
+      setSubmitting(false);
       setJob(created);
     } catch (caught) {
       setError(caught.message);
