@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f9f7">
+    <title>Foto a 3D</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/vendor/model-viewer.min.js"></script>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <h1>Foto a 3D</h1>
+      <input id="photo" class="visually-hidden" type="file" accept="image/*" capture="environment" aria-describedby="status">
+      <label class="capture-button" for="photo">Hacer una foto</label>
+      <p id="status" role="status" aria-live="polite">Elige una foto para crear tu modelo 3D.</p>
+      <model-viewer id="preview" hidden camera-controls auto-rotate touch-action="pan-y" alt="Tu modelo 3D generado" aria-label="Gira tu modelo 3D generado"></model-viewer>
+      <a id="download" class="download-button" hidden download="modelo.glb">Descargar GLB</a>
+    </main>
+  </body>
+</html>

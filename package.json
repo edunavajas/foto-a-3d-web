@@ -1,0 +1,19 @@
+{
+  "name": "foto-a-3d-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mobile web service: upload a photo, Tripo generates a 3D model (GLB), view it on the phone.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dependencies": {
+    "@google/model-viewer": "^4.4.0",
+    "express": "^4.21.0",
+    "multer": "^2.0.0"
+  }
+}
