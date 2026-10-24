@@ -38,8 +38,8 @@ const QUALITY_OPTIONS = [
 ];
 
 const QUALITY_HINT = {
-  fast: 'Menos créditos. Listo en segundos.',
-  best: 'Primero un modelo rápido y luego se mejora a máxima calidad. Consume más créditos y tarda minutos.',
+  fast: 'Modelo low-poly listo en segundos.',
+  best: 'Modelo rápido al instante y luego se mejora a máxima fidelidad. Tarda minutos.',
 };
 
 export default function MainView({ onLogout, onExpired, notify }) {
