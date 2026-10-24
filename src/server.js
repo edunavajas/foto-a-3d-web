@@ -167,7 +167,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const port = Number(process.env.PORT || 3000);
   try {
     const app = createApp();
-    const server = app.listen(port, '0.0.0.0', error => {
+    // Dual-stack listen: binds :: (with IPv4-mapped addresses) so both
+    // 127.0.0.1 and ::1 localhost healthchecks connect.
+    const server = app.listen(port, error => {
       if (error) {
         process.stderr.write(`Could not start foto-a-3d-web: ${error.code || 'listen error'}\n`);
         process.exitCode = 1;
