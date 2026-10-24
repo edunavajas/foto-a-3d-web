@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* The uiarc foundation owns the palette; body styles bridge it to the layout. */
+body {
+  font-family: var(--font-body);
+  letter-spacing: var(--tracking-body);
+  background: var(--background);
+  color: var(--foreground);
+  min-height: 100dvh;
+}
