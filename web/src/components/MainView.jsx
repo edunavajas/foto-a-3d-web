@@ -108,7 +108,10 @@ export default function MainView({ onLogout, onExpired, notify }) {
     return () => clearInterval(timer);
   }, [busy]);
 
-  const progressValue = status === 'error' ? 0 : busy ? Math.min(92, (elapsed / 180) * 100) : 100;
+  // Tripo's real progress (progress during generating, hqProgress while improving) wins over
+  // the elapsed-time estimate; the uiarc Progress spring eases value changes, so it never jumps.
+  const realProgress = status === 'improving' ? job?.hqProgress : job?.progress;
+  const progressValue = status === 'error' ? 0 : busy ? (typeof realProgress === 'number' ? realProgress : Math.min(92, (elapsed / 180) * 100)) : 100;
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-10 pt-5">

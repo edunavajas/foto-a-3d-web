@@ -9,13 +9,14 @@ Servicio web móvil: sube una foto y Tripo genera un modelo 3D (GLB) que puedes 
   - **Rápido**: modelo low-poly (`P1-20260311`). Gasta menos créditos y está listo en segundos.
   - **Máxima calidad**: primero se publica el modelo rápido y después se lanza una segunda tarea de alta fidelidad (`v3.1-20260211`) reutilizando la foto ya subida. Mientras mejora ves el modelo rápido con el aviso «Mejorando a máxima calidad…»; al terminar el visor cambia al modelo HQ. Coste aproximado: Rápido gasta menos; Máxima consume una tarea P1 + una tarea v3.1. Si la fase de mejora falla, conservas el modelo rápido (la mejora es un extra, no un error).
 - Animación de nube de puntos durante la generación (los colores de la foto se convierten en puntos con profundidad) y visor 3D interactivo con botón «Descargar GLB».
+- La barra de progreso muestra el progreso real devuelto por la API de Tripo (estimación temporal solo hasta que la API reporta un valor).
 
 ## Desarrollo
 
 ```bash
 npm install
 npm run build      # construye la SPA en dist/ (Vite, root web/)
-npm test           # 31 tests offline (node --test)
+npm test           # 32 tests offline (node --test)
 npm start          # sirve dist/ y la API en el puerto 3000
 ```
 

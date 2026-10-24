@@ -225,8 +225,8 @@ test('quality best: P1 task, improving with reused file token, then HQ model', a
       return created.length === 1 ? 'task-fast' : 'task-hq';
     },
     getTask: async taskId => {
-      if (taskId === 'task-fast') return ++fastPolls === 1 ? { status: 'running' } : { status: 'success', output: { model: 'https://cdn/fast.glb' } };
-      return ++hqPolls === 1 ? { status: 'running' } : { status: 'success', output: { model: 'https://cdn/hq.glb' } };
+      if (taskId === 'task-fast') return ++fastPolls === 1 ? { status: 'running', progress: 37 } : { status: 'success', output: { model: 'https://cdn/fast.glb' } };
+      return ++hqPolls === 1 ? { status: 'running', progress: 88 } : { status: 'success', output: { model: 'https://cdn/hq.glb' } };
     },
     downloadModel: async task => Buffer.from(String(task.output.model).includes('hq') ? 'GLB-HQ' : 'GLB-FAST'),
   });
@@ -236,12 +236,14 @@ test('quality best: P1 task, improving with reused file token, then HQ model', a
 
     const generating = await status(base, id, cookie);
     assert.equal(generating.status, 'generating');
+    assert.equal(generating.progress, 37);
 
     // First poll: fast task running. Second: fast success -> improvement task created.
     const improving = await status(base, id, cookie);
     assert.equal(improving.status, 'improving');
     assert.equal(improving.modelUrl, `/api/jobs/${id}/model`);
     assert.equal(improving.hasHq, false);
+    assert.equal(improving.hqProgress, null);
 
     // The HQ task reuses the uploaded photo token; no second upload.
     assert.deepEqual(created, [
@@ -251,6 +253,7 @@ test('quality best: P1 task, improving with reused file token, then HQ model', a
 
     const improvingPoll = await status(base, id, cookie);
     assert.equal(improvingPoll.status, 'improving');
+    assert.equal(improvingPoll.hqProgress, 88);
 
     const done = await status(base, id, cookie);
     assert.equal(done.status, 'ready');
@@ -269,6 +272,8 @@ test('quality best: P1 task, improving with reused file token, then HQ model', a
     assert.equal(stored[0].hqTaskId, 'task-hq');
     assert.equal(stored[0].modelVersion, 2);
     assert.equal(stored[0].hasHq, true);
+    assert.equal(stored[0].progress, 37);
+    assert.equal(stored[0].hqProgress, 88);
     assert.equal((await fs.readFile(path.join(dataDir, 'models', `${id}-hq.glb`))).toString(), 'GLB-HQ');
   } finally {
     await close();
@@ -334,6 +339,25 @@ test('failed task becomes an error job with the API message', async () => {
     const job = await status(base, id, cookie);
     assert.equal(job.status, 'error');
     assert.equal(job.error, 'generation failed upstream');
+  } finally {
+    await close();
+  }
+});
+
+test('progress is clamped to 0-100 and kept when the API stops reporting it', async () => {
+  let polls = 0;
+  const tripo = fakeTripo({
+    getTask: async () => (++polls === 1 ? { status: 'running', progress: 150 } : { status: 'running' }),
+  });
+  const { base, dataDir, cookie, close } = await startApp({ tripo });
+  try {
+    const { body: { id } } = await readBody(await post(base, JPEG, { cookie }));
+    const first = await status(base, id, cookie);
+    assert.equal(first.progress, 100);
+    const second = await status(base, id, cookie);
+    assert.equal(second.progress, 100); // absent progress keeps the previous value
+    const stored = JSON.parse(await fs.readFile(path.join(dataDir, 'jobs.json'), 'utf8'));
+    assert.equal(stored[0].progress, 100);
   } finally {
     await close();
   }

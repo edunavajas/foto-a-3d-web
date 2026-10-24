@@ -42,6 +42,12 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
+/** Record a 0-100 Tripo progress value; absent/NaN keeps the previous one and it never goes backwards. */
+function trackProgress(job, key, task) {
+  const value = Number(task.progress);
+  if (Number.isFinite(value)) job[key] = Math.max(job[key] ?? 0, Math.min(100, Math.max(0, value)));
+}
+
 export function createApp({
   tripo = new TripoClient(),
   dataDir = process.env.DATA_DIR || path.join(root, 'data'),
@@ -85,6 +91,7 @@ export function createApp({
     } catch {
       return; // transient poll failure: stay generating, the next poll retries
     }
+    trackProgress(job, 'progress', task);
     if (task.status === 'success') {
       try {
         const model = await tripo.downloadModel(task);
@@ -125,6 +132,7 @@ export function createApp({
     } catch {
       return;
     }
+    trackProgress(job, 'hqProgress', task);
     if (task.status === 'success') {
       try {
         const model = await tripo.downloadModel(task);
@@ -211,6 +219,7 @@ export function createApp({
           modelUrl: null,
           modelVersion: 0,
           hasHq: false,
+          progress: null,
           createdAt: now,
           updatedAt: now,
           lastPolledAt: Date.now(),
@@ -231,7 +240,7 @@ export function createApp({
       const job = jobs.get(req.params.id);
       if (!job) return res.sendStatus(404);
       await refresh(job);
-      res.json({ id: job.id, status: job.status, error: job.error, modelUrl: job.modelUrl, quality: job.quality, hasHq: Boolean(job.hasHq) });
+      res.json({ id: job.id, status: job.status, error: job.error, modelUrl: job.modelUrl, quality: job.quality, hasHq: Boolean(job.hasHq), progress: job.progress ?? null, ...(job.status === 'improving' ? { hqProgress: job.hqProgress ?? null } : {}) });
     } catch (error) {
       next(error);
     }
