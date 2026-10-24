@@ -65,6 +65,25 @@ test('createImageToModelTask requires a model (no silent default)', async () => 
   await assert.rejects(client().createImageToModelTask('tok-1'), TripoError);
 });
 
+test('createImageToModelTask merges genParams options into the payload', async t => {
+  const calls = stubFetch(t, () => jsonResponse({ code: 0, data: { task_id: 'task-9' } }));
+  await client().createImageToModelTask('tok-1', 'P1-20260311', { texture: false, pbr: false });
+  assert.deepEqual(JSON.parse(calls[0].init.body), { input: 'tok-1', model: 'P1-20260311', texture: false, pbr: false });
+});
+
+test('createRigTask posts to animations/rig with the wire rig model value', async t => {
+  const calls = stubFetch(t, () => jsonResponse({ code: 0, data: { task_id: 'rig-1' } }));
+  assert.equal(await client().createRigTask('task-1'), 'rig-1');
+  assert.equal(calls[0].url, `${BASE}/v3/animations/rig`);
+  assert.deepEqual(JSON.parse(calls[0].init.body), { input: 'task-1', model: 'v3.0-20260909' });
+});
+
+test('createRigTask is NOT retried on 5xx (the task may already exist)', async t => {
+  const calls = stubFetch(t, () => jsonResponse({ code: 1, data: null, message: 'boom' }, 500));
+  await assert.rejects(client().createRigTask('task-1'), { message: 'boom' });
+  assert.equal(calls.length, 1);
+});
+
 test('getTask hits the task endpoint and returns the task object', async t => {
   const task = { task_id: 'tk 1', status: 'running' };
   const calls = stubFetch(t, () => jsonResponse({ code: 0, data: task }));

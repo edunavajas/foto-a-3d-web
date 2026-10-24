@@ -5,6 +5,7 @@ import { Button } from './ui/button/button';
 import { Card } from './ui/card/card';
 import { Progress } from './ui/progress/progress';
 import SegmentedControl from './ui/segmented-control/segmented-control';
+import { Switch } from './ui/switch/switch';
 import { FileDropzone } from './ui/file-dropzone/file-dropzone';
 import PointcloudCanvas from './PointcloudCanvas.jsx';
 
@@ -44,6 +45,8 @@ const QUALITY_HINT = {
 
 export default function MainView({ onLogout, onExpired, notify }) {
   const [quality, setQuality] = useState('fast');
+  const [texture, setTexture] = useState(true);
+  const [rig, setRig] = useState(false);
   const [photo, setPhoto] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [job, setJob] = useState(null);
@@ -52,7 +55,7 @@ export default function MainView({ onLogout, onExpired, notify }) {
   const pollRef = useRef(null);
 
   const status = job?.status;
-  const busy = submitting || status === 'generating' || status === 'improving';
+  const busy = submitting || status === 'generating' || status === 'improving' || status === 'rigging';
   const hasModel = Boolean(job?.modelUrl);
   // Cache-bust when the model version changes, like the original UI did.
   const modelSrc = job?.modelUrl
@@ -71,6 +74,8 @@ export default function MainView({ onLogout, onExpired, notify }) {
       const form = new FormData();
       form.append('photo', photo);
       form.append('quality', quality);
+      form.append('texture', texture ? 'on' : 'off');
+      form.append('rig', rig ? 'on' : 'off');
       const created = await readJson(await fetch('/api/jobs', { method: 'POST', body: form }));
       // Hand loading state over to the job status; submitting must not outlive the upload.
       setSubmitting(false);
@@ -110,10 +115,14 @@ export default function MainView({ onLogout, onExpired, notify }) {
     return () => clearInterval(timer);
   }, [busy]);
 
-  // Tripo's real progress (progress during generating, hqProgress while improving) wins over
-  // the elapsed-time estimate; the uiarc Progress spring eases value changes, so it never jumps.
-  const realProgress = status === 'improving' ? job?.hqProgress : job?.progress;
+  // Tripo's real progress (progress during generating, hqProgress while improving, rigProgress
+  // while rigging) wins over the elapsed-time estimate; the uiarc Progress spring eases value
+  // changes, so it never jumps.
+  const realProgress = status === 'rigging' ? job?.rigProgress : status === 'improving' ? job?.hqProgress : job?.progress;
   const progressValue = status === 'error' ? 0 : busy ? (typeof realProgress === 'number' ? realProgress : Math.min(92, (elapsed / 180) * 100)) : 100;
+  const progressLabel = status === 'rigging' ? 'Añadiendo esqueleto…'
+    : status === 'improving' ? 'Mejorando a máxima calidad…'
+      : 'Generando modelo… puede tardar 1-3 minutos';
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 pb-10 pt-5">
@@ -131,6 +140,18 @@ export default function MainView({ onLogout, onExpired, notify }) {
             label="Calidad del modelo"
           />
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{QUALITY_HINT[quality]}</p>
+        </div>
+
+        <div className="grid gap-1">
+          <Switch label="Texturas" checked={texture} onCheckedChange={setTexture} />
+          {!texture && (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Modelo sin pintar: más rápido y gasta menos créditos</p>
+          )}
+        </div>
+
+        <div className="grid gap-1">
+          <Switch label="Esqueleto" checked={rig} onCheckedChange={setRig} />
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Añade huesos para animar el modelo. Gasta créditos extra</p>
         </div>
 
         <FileDropzone
@@ -168,7 +189,7 @@ export default function MainView({ onLogout, onExpired, notify }) {
           >
             {busy && (
               <div className="mb-4 grid gap-3">
-                <Progress value={progressValue} label={status === 'improving' ? 'Mejorando a máxima calidad…' : 'Generando modelo… puede tardar 1-3 minutos'} showValue />
+                <Progress value={progressValue} label={progressLabel} showValue />
                 {status === 'generating' && !hasModel && <PointcloudCanvas photo={photo} />}
               </div>
             )}
@@ -198,10 +219,16 @@ export default function MainView({ onLogout, onExpired, notify }) {
                   </a>
                 )}
               >
-                {status === 'improving' && (
+                {(status === 'improving' || status === 'rigging') && (
                   <p className="mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs" style={{ background: 'var(--accent-subtle)', color: 'var(--accent-strong)' }}>
                     <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} aria-hidden="true" />
-                    Mejorando a máxima calidad…
+                    {status === 'rigging' ? 'Añadiendo esqueleto…' : 'Mejorando a máxima calidad…'}
+                  </p>
+                )}
+                {job.hasRig && (
+                  <p className="mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs" style={{ background: 'var(--accent-subtle)', color: 'var(--accent-strong)' }}>
+                    <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} aria-hidden="true" />
+                    Con esqueleto
                   </p>
                 )}
               </Card>

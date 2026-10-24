@@ -9,6 +9,8 @@ const FAILED_STATUSES = new Set(['failed', 'cancelled', 'expired']);
 /** Wire values for the image-to-model models (verified against the Tripo V3 API). */
 export const MODEL_FAST = 'P1-20260311'; // low-poly, fast, cheaper
 export const MODEL_BEST = 'v3.1-20260211'; // high fidelity, slower
+/** Wire value for the rig step; marketing names like rig-v1.0 are rejected by the API. */
+export const RIG_MODEL = 'v3.0-20260909';
 
 export class TripoError extends Error {
   constructor(message, { httpStatus, apiCode, retryAfterMs } = {}) {
@@ -122,12 +124,24 @@ export class TripoClient {
     return data.file_token;
   }
 
-  async createImageToModelTask(fileToken, model) {
+  async createImageToModelTask(fileToken, model, options = {}) {
     if (!model) throw new TripoError('createImageToModelTask requires a model');
     const data = await this.#send(
       'POST',
       '/v3/generation/image-to-model',
-      { body: JSON.stringify({ input: fileToken, model }), headers: { 'Content-Type': 'application/json' } },
+      { body: JSON.stringify({ input: fileToken, model, ...options }), headers: { 'Content-Type': 'application/json' } },
+      { idempotent: false },
+    );
+    return data.task_id;
+  }
+
+  /** Rig chain step: turns a finished model task into an animate_rig task (~25 credits). */
+  async createRigTask(sourceTaskId) {
+    if (!sourceTaskId) throw new TripoError('createRigTask requires a source task id');
+    const data = await this.#send(
+      'POST',
+      '/v3/animations/rig',
+      { body: JSON.stringify({ input: sourceTaskId, model: RIG_MODEL }), headers: { 'Content-Type': 'application/json' } },
       { idempotent: false },
     );
     return data.task_id;

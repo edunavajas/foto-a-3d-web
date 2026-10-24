@@ -48,6 +48,11 @@ function trackProgress(job, key, task) {
   if (Number.isFinite(value)) job[key] = Math.max(job[key] ?? 0, Math.min(100, Math.max(0, value)));
 }
 
+/** Wire genParams for image-to-model: textured models get PBR + standard quality (CLI 3D-print preset). */
+function textureParams(texture) {
+  return texture ? { texture: true, pbr: true, texture_quality: 'standard' } : { texture: false, pbr: false };
+}
+
 export function createApp({
   tripo = new TripoClient(),
   dataDir = process.env.DATA_DIR || path.join(root, 'data'),
@@ -81,9 +86,10 @@ export function createApp({
   }
 
   async function refresh(job) {
-    if ((job.status !== 'generating' && job.status !== 'improving') || Date.now() - job.lastPolledAt < minPollIntervalMs) return;
+    if ((job.status !== 'generating' && job.status !== 'improving' && job.status !== 'rigging') || Date.now() - job.lastPolledAt < minPollIntervalMs) return;
     job.lastPolledAt = Date.now();
     if (job.status === 'improving') return refreshImprovement(job);
+    if (job.status === 'rigging') return refreshRig(job);
 
     let task;
     try {
@@ -102,15 +108,15 @@ export function createApp({
         if (job.quality === 'best') {
           try {
             // The uploaded photo's file token is reusable: no second upload.
-            job.hqTaskId = await tripo.createImageToModelTask(job.fileToken, MODEL_BEST);
+            job.hqTaskId = await tripo.createImageToModelTask(job.fileToken, MODEL_BEST, textureParams(job.texture));
             job.status = 'improving';
           } catch (error) {
             // The fast model is already delivered; the upgrade is a bonus, not a failure.
             process.stderr.write(`Improvement task creation failed for job ${job.id}: ${error?.message || error}\n`);
-            job.status = 'ready';
+            job.status = job.rig ? 'rigging' : 'ready';
           }
         } else {
-          job.status = 'ready';
+          job.status = job.rig ? 'rigging' : 'ready';
         }
       } catch (error) {
         job.status = 'error';
@@ -140,13 +146,55 @@ export function createApp({
         job.modelVersion = 2;
         job.modelUrl = `/api/jobs/${job.id}/model?variant=hq`;
         job.hasHq = true;
-        job.status = 'ready';
       } catch (error) {
         process.stderr.write(`Improvement download failed for job ${job.id}: ${error?.message || error}\n`);
+      }
+      // Whatever the improvement did, the best current model is delivered; rigging follows.
+      job.status = job.rig ? 'rigging' : 'ready';
+    } else if (isFailedStatus(task.status)) {
+      process.stderr.write(`Improvement task failed for job ${job.id}: ${task.status}\n`);
+      job.status = job.rig ? 'rigging' : 'ready';
+    }
+    job.updatedAt = new Date().toISOString();
+    await persist();
+  }
+
+  /** Third phase (rig=on): skeletonize the best current model; any failure keeps it unrigged. */
+  async function refreshRig(job) {
+    if (!job.rigTaskId) {
+      // The rig input is the best current task: the HQ model when it exists, the fast one otherwise.
+      const source = job.modelUrl?.includes('variant=hq') ? job.hqTaskId : job.taskId;
+      try {
+        job.rigTaskId = await tripo.createRigTask(source);
+      } catch (error) {
+        process.stderr.write(`Rig task creation failed for job ${job.id}: ${error?.message || error}\n`);
+        job.status = 'ready';
+        job.updatedAt = new Date().toISOString();
+        await persist();
+        return;
+      }
+    }
+    let task;
+    try {
+      task = await tripo.getTask(job.rigTaskId);
+    } catch {
+      return;
+    }
+    trackProgress(job, 'rigProgress', task);
+    if (task.status === 'success') {
+      try {
+        const model = await tripo.downloadModel(task);
+        await writeModel(job.id, model, '-rigged');
+        job.modelVersion += 1;
+        job.modelUrl = `/api/jobs/${job.id}/model?variant=rigged`;
+        job.hasRig = true;
+        job.status = 'ready';
+      } catch (error) {
+        process.stderr.write(`Rig download failed for job ${job.id}: ${error?.message || error}\n`);
         job.status = 'ready';
       }
     } else if (isFailedStatus(task.status)) {
-      process.stderr.write(`Improvement task failed for job ${job.id}: ${task.status}\n`);
+      process.stderr.write(`Rig task failed for job ${job.id}: ${task.status}\n`);
       job.status = 'ready';
     }
     job.updatedAt = new Date().toISOString();
@@ -193,7 +241,7 @@ export function createApp({
 
   app.post('/api/jobs', upload.single('photo'), async (req, res, next) => {
     try {
-      const busy = status => status === 'generating' || status === 'improving';
+      const busy = status => status === 'generating' || status === 'improving' || status === 'rigging';
       if (creating || [...jobs.values()].some(job => busy(job.status))) {
         return res.status(409).json({ error: 'Ya hay una generación en curso. Espera a que termine.' });
       }
@@ -201,25 +249,35 @@ export function createApp({
       const mime = imageKind(req.file.buffer);
       if (!mime) return res.status(415).json({ error: 'Usa una imagen JPEG, PNG, WebP o BMP.' });
       const quality = req.body.quality === 'best' ? 'best' : 'fast';
+      const textureField = req.body.texture ?? 'on';
+      const rigField = req.body.rig ?? 'off';
+      if (!['on', 'off'].includes(textureField) || !['on', 'off'].includes(rigField)) {
+        return res.status(400).json({ error: 'Opciones de generación no válidas.' });
+      }
 
       creating = true;
       try {
         const fileToken = await tripo.uploadImage(req.file.buffer, `photo${EXTENSIONS[mime]}`, mime);
         // The fast model always goes first; 'best' improves it afterwards.
-        const taskId = await tripo.createImageToModelTask(fileToken, MODEL_FAST);
+        const taskId = await tripo.createImageToModelTask(fileToken, MODEL_FAST, textureParams(textureField === 'on'));
         const now = new Date().toISOString();
         const job = {
           id: crypto.randomUUID(),
           taskId,
           hqTaskId: null,
+          rigTaskId: null,
           fileToken,
           quality,
+          texture: textureField === 'on',
+          rig: rigField === 'on',
           status: 'generating',
           error: null,
           modelUrl: null,
           modelVersion: 0,
           hasHq: false,
+          hasRig: false,
           progress: null,
+          rigProgress: null,
           createdAt: now,
           updatedAt: now,
           lastPolledAt: Date.now(),
@@ -240,7 +298,18 @@ export function createApp({
       const job = jobs.get(req.params.id);
       if (!job) return res.sendStatus(404);
       await refresh(job);
-      res.json({ id: job.id, status: job.status, error: job.error, modelUrl: job.modelUrl, quality: job.quality, hasHq: Boolean(job.hasHq), progress: job.progress ?? null, ...(job.status === 'improving' ? { hqProgress: job.hqProgress ?? null } : {}) });
+      res.json({
+        id: job.id,
+        status: job.status,
+        error: job.error,
+        modelUrl: job.modelUrl,
+        quality: job.quality,
+        hasHq: Boolean(job.hasHq),
+        hasRig: Boolean(job.hasRig),
+        progress: job.progress ?? null,
+        ...(job.status === 'improving' ? { hqProgress: job.hqProgress ?? null } : {}),
+        ...(job.status === 'rigging' ? { rigProgress: job.rigProgress ?? null } : {}),
+      });
     } catch (error) {
       next(error);
     }
@@ -249,11 +318,11 @@ export function createApp({
   app.get('/api/jobs/:id/model', async (req, res, next) => {
     try {
       const job = jobs.get(req.params.id);
-      if (!job || (job.status !== 'ready' && job.status !== 'improving')) return res.sendStatus(404);
-      const candidates = req.query.variant === 'hq'
-        ? [path.join(modelsDir, `${job.id}-hq.glb`), path.join(modelsDir, `${job.id}.glb`)]
-        : [path.join(modelsDir, `${job.id}.glb`)];
-      for (const file of candidates) {
+      if (!job || !['ready', 'improving', 'rigging'].includes(job.status)) return res.sendStatus(404);
+      // Rigged falls back to HQ then fast, so the viewer never 404s while a newer variant is missing.
+      const suffixes = req.query.variant === 'hq' ? ['-hq', ''] : req.query.variant === 'rigged' ? ['-rigged', '-hq', ''] : [''];
+      for (const suffix of suffixes) {
+        const file = path.join(modelsDir, `${job.id}${suffix}.glb`);
         try {
           await fs.access(file);
           res.type('model/gltf-binary');

@@ -8,6 +8,9 @@ Servicio web móvil: sube una foto y Tripo genera un modelo 3D (GLB) que puedes 
 - **Dos modos de generación**:
   - **Rápido**: modelo low-poly (`P1-20260311`). Gasta menos créditos y está listo en segundos.
   - **Máxima calidad**: primero se publica el modelo rápido y después se lanza una segunda tarea de alta fidelidad (`v3.1-20260211`) reutilizando la foto ya subida. Mientras mejora ves el modelo rápido con el aviso «Mejorando a máxima calidad…»; al terminar el visor cambia al modelo HQ. Coste aproximado: Rápido gasta menos; Máxima consume una tarea P1 + una tarea v3.1. Si la fase de mejora falla, conservas el modelo rápido (la mejora es un extra, no un error).
+- **Opciones de generación** (interruptores bajo el selector de calidad):
+  - **Texturas** (activado por defecto): el modelo se genera con texturas PBR y calidad estándar. Si lo desactivas, el modelo sale sin pintar: más rápido y gasta menos créditos.
+  - **Esqueleto** (desactivado por defecto): cuando el modelo está listo, lanza una tarea de rig de Tripo (~25 créditos extra) que añade huesos para animarlo. Durante la fase verás «Añadiendo esqueleto…» y, al terminar, el resultado lleva la etiqueta «Con esqueleto» y se sirve con `?variant=rigged`. Si la fase de rig falla, conservas el modelo sin esqueleto (es un extra, no un error).
 - Animación de nube de puntos durante la generación (los colores de la foto se convierten en puntos con profundidad) y visor 3D interactivo con botón «Descargar GLB».
 - La barra de progreso muestra el progreso real devuelto por la API de Tripo (estimación temporal solo hasta que la API reporta un valor).
 
@@ -16,7 +19,7 @@ Servicio web móvil: sube una foto y Tripo genera un modelo 3D (GLB) que puedes 
 ```bash
 npm install
 npm run build      # construye la SPA en dist/ (Vite, root web/)
-npm test           # 32 tests offline (node --test)
+npm test           # 42 tests offline (node --test)
 npm start          # sirve dist/ y la API en el puerto 3000
 ```
 
